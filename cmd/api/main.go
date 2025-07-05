@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"net/http"
-	"os"
 	"os/signal"
 	"syscall"
 	"time"
@@ -11,11 +10,12 @@ import (
 	_ "github.com/edumes/golang-api-rest/docs"
 	"github.com/edumes/golang-api-rest/internal/api"
 	"github.com/edumes/golang-api-rest/internal/application"
+	"github.com/edumes/golang-api-rest/internal/config"
 	"github.com/edumes/golang-api-rest/internal/domain"
 	"github.com/edumes/golang-api-rest/internal/infrastructure"
+	"github.com/edumes/golang-api-rest/internal/observability"
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
-	"github.com/spf13/viper"
 )
 
 // @title Golang API REST
@@ -25,28 +25,45 @@ import (
 // @BasePath /
 
 func main() {
-	logger := infrastructure.GetColoredLogger()
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
 
+	logger := infrastructure.GetColoredLogger()
 	logger.Info("Starting Golang API REST application")
 
 	logger.Info("Loading configuration")
-	viper.SetConfigFile(".env")
-	if err := viper.ReadInConfig(); err != nil {
+	cfg, err := config.LoadConfig()
+	if err != nil {
 		logger.WithFields(logrus.Fields{
 			"error": err.Error(),
-		}).Warn("Failed to read .env file, using environment variables")
+		}).Fatal("Failed to load configuration")
 	}
-	viper.AutomaticEnv()
 
 	logger.Info("Configuring application logging")
 	logrus.SetFormatter(&logrus.TextFormatter{FullTimestamp: true})
-	logrus.SetLevel(logrus.DebugLevel)
 
-	gin.SetMode(gin.ReleaseMode)
-	logger.Info("Gin mode set to release")
+	switch cfg.Logging.Level {
+	case "debug":
+		logrus.SetLevel(logrus.DebugLevel)
+	case "info":
+		logrus.SetLevel(logrus.InfoLevel)
+	case "warn":
+		logrus.SetLevel(logrus.WarnLevel)
+	case "error":
+		logrus.SetLevel(logrus.ErrorLevel)
+	default:
+		logrus.SetLevel(logrus.InfoLevel)
+	}
+
+	if cfg.Logging.Level == "debug" {
+		gin.SetMode(gin.DebugMode)
+	} else {
+		gin.SetMode(gin.ReleaseMode)
+	}
+	logger.Info("Gin mode configured")
 
 	logger.Info("Initializing database connection")
-	db, err := infrastructure.NewPostgresDB()
+	db, err := infrastructure.NewPostgresDBWithConfig(cfg)
 	if err != nil {
 		logger.WithFields(logrus.Fields{
 			"error": err.Error(),
@@ -75,26 +92,31 @@ func main() {
 	projectItemService := application.NewProjectItemService(projectItemRepo)
 	logger.Info("Repositories and services initialized successfully")
 
+	logger.Info("Setting up observability")
+	observability.SetupMetrics()
+	healthHandler := observability.NewHealthHandler(db)
+	logger.Info("Observability setup completed")
+
 	logger.Info("Setting up application router")
 	router := api.NewRouter()
-	router.SetupRoutes(userService, productService, projectService, projectItemService)
+	router.SetupRoutes(userService, productService, projectService, projectItemService, healthHandler)
 	r := router.GetEngine()
 	logger.Info("Router setup completed")
 
-	port := viper.GetString("APP_PORT")
-	if port == "" {
-		port = "8080"
-		logger.Warn("APP_PORT not set, using default port 8080")
+	srv := &http.Server{
+		Addr:         ":" + cfg.Server.Port,
+		Handler:      r,
+		ReadTimeout:  cfg.Server.ReadTimeout,
+		WriteTimeout: cfg.Server.WriteTimeout,
+		IdleTimeout:  cfg.Server.IdleTimeout,
 	}
 
 	logger.WithFields(logrus.Fields{
-		"port": port,
+		"port":          cfg.Server.Port,
+		"read_timeout":  cfg.Server.ReadTimeout,
+		"write_timeout": cfg.Server.WriteTimeout,
+		"idle_timeout":  cfg.Server.IdleTimeout,
 	}).Info("Starting HTTP server")
-
-	srv := &http.Server{
-		Addr:    ":" + port,
-		Handler: r,
-	}
 
 	go func() {
 		logger.Info("HTTP server starting")
@@ -107,21 +129,19 @@ func main() {
 
 	logger.Info("HTTP server started successfully")
 
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
+	<-ctx.Done()
 
-	logger.Info("Shutdown signal received, starting shutdown")
+	logger.Info("Shutdown signal received, starting graceful shutdown")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	logger.Info("Shutting down HTTP server")
-	if err := srv.Shutdown(ctx); err != nil {
+	if err := srv.Shutdown(shutdownCtx); err != nil {
 		logger.WithFields(logrus.Fields{
 			"error": err.Error(),
 		}).Fatal("Server forced to shutdown")
 	}
 
-	logger.Info("Server exited")
+	logger.Info("Server exited gracefully")
 }

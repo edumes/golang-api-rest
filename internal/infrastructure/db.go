@@ -3,6 +3,7 @@ package infrastructure
 import (
 	"fmt"
 
+	"github.com/edumes/golang-api-rest/internal/config"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 	"gorm.io/driver/postgres"
@@ -31,6 +32,54 @@ func NewPostgresDB() (*gorm.DB, error) {
 		"user":     viper.GetString("DB_USER"),
 		"database": viper.GetString("DB_NAME"),
 		"sslmode":  viper.GetString("DB_SSLMODE"),
+	}).Debug("Database connection parameters")
+
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Info),
+	})
+
+	if err != nil {
+		log.WithFields(logrus.Fields{
+			"error": err.Error(),
+		}).Error("Failed to connect to PostgreSQL database")
+		return nil, err
+	}
+
+	log.Info("Successfully connected to PostgreSQL database")
+
+	sqlDB, err := db.DB()
+	if err != nil {
+		log.WithFields(logrus.Fields{
+			"error": err.Error(),
+		}).Error("Failed to get underlying sql.DB")
+		return nil, err
+	}
+
+	if err := sqlDB.Ping(); err != nil {
+		log.WithFields(logrus.Fields{
+			"error": err.Error(),
+		}).Error("Failed to ping PostgreSQL database")
+		return nil, err
+	}
+
+	log.Info("Database connection ping successful")
+
+	return db, nil
+}
+
+func NewPostgresDBWithConfig(cfg *config.Config) (*gorm.DB, error) {
+	log := logrus.New()
+
+	log.Info("Initializing PostgreSQL database connection with configuration")
+
+	dsn := cfg.GetDatabaseURL()
+
+	log.WithFields(logrus.Fields{
+		"host":     cfg.Database.Host,
+		"port":     cfg.Database.Port,
+		"user":     cfg.Database.User,
+		"database": cfg.Database.DBName,
+		"sslmode":  cfg.Database.SSLMode,
 	}).Debug("Database connection parameters")
 
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{

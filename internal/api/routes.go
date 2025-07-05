@@ -2,7 +2,7 @@ package api
 
 import (
 	"github.com/edumes/golang-api-rest/internal/application"
-	"github.com/gin-contrib/cors"
+	"github.com/edumes/golang-api-rest/internal/observability"
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
 	swaggerFiles "github.com/swaggo/files"
@@ -21,21 +21,23 @@ func NewRouter() *Router {
 	}
 }
 
-func (r *Router) SetupRoutes(userService *application.UserService, productService *application.ProductService, projectService *application.ProjectService, projectItemService *application.ProjectItemService) {
+func (r *Router) SetupRoutes(userService *application.UserService, productService *application.ProductService, projectService *application.ProjectService, projectItemService *application.ProjectItemService, healthHandler *observability.HealthHandler) {
 	r.logger.Info("Setting up application routes")
 
-	r.engine.Use(gin.Recovery())
-	r.engine.Use(cors.Default())
-	r.engine.Use(LoggingMiddleware())
-	r.engine.Use(ErrorRecoveryMiddleware())
+	r.engine.Use(RequestIDMiddleware())
+	r.engine.Use(LoggerMiddleware())
+	r.engine.Use(ErrorHandlerMiddleware())
+	r.engine.Use(RecoveryMiddleware())
+	r.engine.Use(CORSMiddleware())
+	r.engine.Use(observability.MetricsMiddleware())
 
 	r.logger.Debug("Middleware configured successfully")
 
+	r.engine.GET("/metrics", observability.MetricsHandler())
+	healthHandler.RegisterHealthRoutes(r.engine.Group(""))
+
 	r.engine.GET(SwaggerEndpoint, ginSwagger.WrapHandler(swaggerFiles.Handler))
 	r.logger.Debug("Swagger endpoint configured")
-
-	r.setupHealthRoutes()
-	r.logger.Debug("Health routes configured")
 
 	userHandler := NewUserHandler(userService)
 	authHandler := NewAuthHandler(userService)
@@ -65,35 +67,6 @@ func (r *Router) setupV1Routes(userHandler *UserHandler, authHandler *AuthHandle
 	productHandler.RegisterRoutes(protected)
 	projectHandler.RegisterRoutes(protected)
 	projectItemHandler.RegisterRoutes(protected)
-}
-
-func (r *Router) setupHealthRoutes() {
-	r.logger.Debug("Setting up health check routes")
-
-	health := r.engine.Group("/health")
-	{
-		// @Summary Health live check
-		// @Description Check if the application is alive
-		// @Tags health
-		// @Produce json
-		// @Success 200 "OK"
-		// @Router /health/live [get]
-		health.GET("/live", func(c *gin.Context) {
-			r.logger.Debug("Health live check requested")
-			c.Status(StatusOK)
-		})
-
-		// @Summary Health ready check
-		// @Description Check if the application is ready to serve requests
-		// @Tags health
-		// @Produce json
-		// @Success 200 "OK"
-		// @Router /health/ready [get]
-		health.GET("/ready", func(c *gin.Context) {
-			r.logger.Debug("Health ready check requested")
-			c.Status(StatusOK)
-		})
-	}
 }
 
 func (r *Router) GetEngine() *gin.Engine {

@@ -1,140 +1,215 @@
 # Golang API REST
 
-API REST em Go, seguindo Clean/Hexagonal Architecture, pronto para produção e escalabilidade.
+API REST robusta em Go implementando Clean Architecture com observabilidade, validação, tratamento de erros padronizado e configuração centralizada.
 
-## Visão Geral
-- Estrutura modular (api, application, domain, infrastructure)
-- CRUD completo de usuários, produtos, projetos e itens de projeto
-- Autenticação JWT
-- **Logging abrangente com Logrus**
-- Observabilidade (Prometheus, OpenTelemetry)
-- Pronto para Docker, Kubernetes e CI/CD
+## 🚀 Funcionalidades
 
-## Pré-requisitos
-- Go 1.21+
-- Docker e Docker Compose
-- PostgreSQL
+### ✅ Implementadas
+- **Clean Architecture** - Separação clara entre domínio, aplicação e infraestrutura
+- **Configuração Centralizada** - Viper para gerenciamento de configurações
+- **Contexto Global e Cancelamento** - Shutdown gracioso com timeout
+- **Middlewares Avançados**:
+  - Request ID para rastreamento
+  - Logging estruturado com contexto
+  - Tratamento de erros padronizado
+  - CORS dinâmico
+  - Recovery de panics
+- **Validação de Payload** - go-playground/validator com mensagens customizadas
+- **Tratamento de Erros Padronizado** - AppError com códigos HTTP e detalhes
+- **Observabilidade**:
+  - Prometheus metrics em `/metrics`
+  - Health checks em `/health/live`, `/health/ready`, `/health/detailed`
+  - Logging estruturado com Logrus
+- **Documentação Swagger** - Auto-gerada em `/docs/index.html`
+- **Automação** - Makefile com comandos para desenvolvimento
 
-## Instalação
-```sh
+### 🔄 Em Desenvolvimento
+- Migrations versionadas com golang-migrate
+- Tracing com OpenTelemetry e Jaeger
+- Testes automatizados (unit, integration, e2e)
+
+## 📋 Pré-requisitos
+
+- Go 1.24.4+
+- PostgreSQL 12+
+- Docker (opcional)
+
+## 🛠️ Instalação
+
+1. **Clone o repositório**
+```bash
 git clone https://github.com/edumes/golang-api-rest.git
 cd golang-api-rest
-go mod tidy
 ```
 
-## Como rodar
-```sh
-# Usando make
+2. **Instale as dependências**
+```bash
+make deps
+make tidy
+```
+
+3. **Configure o ambiente**
+```bash
+cp env.example .env
+# Edite o arquivo .env com suas configurações
+```
+
+4. **Execute as migrations**
+```bash
+make migrate-up
+```
+
+5. **Execute o projeto**
+```bash
+# Desenvolvimento
+make dev
+
+# Produção
 make run
-
-# Ou diretamente
-go run cmd/api/main.go
-
-# Com Docker
-docker-compose up
 ```
 
-## Configuração
-- Copie `.env.example` para `.env` e ajuste as variáveis.
+## 📊 Observabilidade
 
-## Logging
+### Health Checks
+- `GET /health/live` - Verifica se a aplicação está viva
+- `GET /health/ready` - Verifica se está pronta para receber requests
+- `GET /health/detailed` - Informações detalhadas de saúde
 
-### Visão Geral
-O projeto implementa logging abrangente usando **Logrus** em todas as camadas da aplicação:
+### Métricas Prometheus
+- `GET /metrics` - Métricas do Prometheus
+- HTTP requests total, duração, em andamento
+- Database connections e query duration
+- Business operations
 
-- **Handlers**: Log de requisições, respostas e erros
-- **Services**: Log de operações de negócio e validações
-- **Repository**: Log de operações de banco de dados
-- **Middleware**: Log de autenticação e performance
-- **Main**: Log de inicialização e shutdown
+### Logging
+- Logging estruturado com Logrus
+- Request ID para rastreamento
+- Contexto de usuário quando autenticado
+- Níveis configuráveis (debug, info, warn, error)
 
-### Níveis de Log
-- **DEBUG**: Informações detalhadas para desenvolvimento
-- **INFO**: Eventos normais da aplicação
-- **WARN**: Situações que merecem atenção
-- **ERROR**: Erros que não impedem a execução
-- **FATAL**: Erros críticos que param a aplicação
+## 🔐 Autenticação
 
-### Estrutura dos Logs
-Todos os logs incluem campos estruturados:
-```json
-{
-  "level": "info",
-  "msg": "User created successfully",
-  "time": "2024-01-15T10:30:00Z",
-  "user_id": "uuid",
-  "email": "user@example.com",
-  "method": "POST",
-  "path": "/api/v1/users",
-  "ip": "192.168.1.1",
-  "latency": "150ms"
-}
-```
-
-### Logs por Camada
-
-#### Handlers (API Layer)
-- Log de entrada de requisições
-- Log de validação de dados
-- Log de respostas de sucesso/erro
-- Log de autenticação e autorização
-
-#### Services (Application Layer)
-- Log de operações de negócio
-- Log de validações
-- Log de transformações de dados
-- Log de chamadas para repositories
-
-#### Repository (Infrastructure Layer)
-- Log de conexões com banco
-- Log de queries executadas
-- Log de filtros aplicados
-- Log de resultados de queries
-
-#### Middleware
-- Log de performance (latência)
-- Log de autenticação JWT
-- Log de headers de requisição
-- Log de recovery de panics
-
-### Monitoramento de Performance
-O middleware de logging captura automaticamente:
-- **Latência** de cada requisição
-- **Status codes** de resposta
-- **User Agent** do cliente
-- **IP** do cliente
-- **Trace ID** (se fornecido)
-
-## Comandos úteis
-- Build: `make build` ou `go build -o golang-api-rest cmd/api/main.go`
-- Migrations: `make migrate-up`
-- Seeds: `make seeds-all` ou `make seeds-users`
-- Swagger: `make swag`
-- Testes: `make test`
-
-## Documentação
-- Swagger: `/swagger/index.html`
-
-## Autenticação
-- `POST /v1/auth/login` para obter JWT
-- Use o token no header: `Authorization: Bearer <token>`
-
-## Seeds
-
-O projeto inclui um sistema de seeds para popular o banco de dados com dados iniciais.
-
-### Executando Seeds
+A API usa JWT para autenticação. Inclua o token no header:
 
 ```bash
-# Executar todos os seeds
-make seeds-all
-
-# Executar apenas seeds de usuários
-make seeds-users
-
-# Via linha de comando
-go run cmd/seeds/main.go -type=users
+Authorization: Bearer <your-jwt-token>
 ```
 
-## Documentação
-- Swagger: `/swagger/index.html`
+## 📚 Documentação
+
+### Swagger UI
+Acesse a documentação interativa em:
+```
+http://localhost:8080/docs/index.html
+```
+
+### Endpoints Principais
+
+#### Autenticação
+- `POST /api/v1/auth/login` - Login de usuário
+- `POST /api/v1/auth/register` - Registro de usuário
+
+#### Usuários
+- `GET /api/v1/users` - Listar usuários
+- `POST /api/v1/users` - Criar usuário
+- `GET /api/v1/users/:id` - Buscar usuário
+- `PUT /api/v1/users/:id` - Atualizar usuário
+- `DELETE /api/v1/users/:id` - Deletar usuário
+
+#### Produtos
+- `GET /api/v1/products` - Listar produtos
+- `POST /api/v1/products` - Criar produto
+- `GET /api/v1/products/:id` - Buscar produto
+- `PUT /api/v1/products/:id` - Atualizar produto
+- `DELETE /api/v1/products/:id` - Deletar produto
+
+#### Projetos
+- `GET /api/v1/projects` - Listar projetos
+- `POST /api/v1/projects` - Criar projeto
+- `GET /api/v1/projects/:id` - Buscar projeto
+- `PUT /api/v1/projects/:id` - Atualizar projeto
+- `DELETE /api/v1/projects/:id` - Deletar projeto
+
+## 🧪 Testes
+
+```bash
+# Executar todos os testes
+make test
+
+# Executar com coverage
+make coverage
+
+# Executar linter
+make lint
+
+# Executar security check
+make security-check
+
+# Pipeline completo
+make ci
+```
+
+## 🐳 Docker
+
+```bash
+# Build da imagem
+make docker-build
+
+# Executar container
+make docker-run
+```
+
+## 🔄 Comandos Úteis
+
+```bash
+# Desenvolvimento
+make dev              # Executar em modo debug
+make fmt              # Formatar código
+make vet              # Verificar código
+make tidy             # Organizar dependências
+
+# Database
+make migrate-up       # Executar migrations
+make migrate-down     # Reverter migrations
+make seed             # Popular banco com dados
+
+# Documentação
+make swagger          # Gerar documentação Swagger
+
+# Ferramentas
+make install-tools    # Instalar ferramentas de desenvolvimento
+make help             # Ver todos os comandos
+```
+
+## 🚀 Deploy
+
+### Local
+```bash
+make build
+./bin/golang-api-rest
+```
+
+### Docker
+```bash
+make docker-build
+docker run -p 8080:8080 --env-file .env golang-api-rest:latest
+```
+
+### Docker Compose
+```bash
+docker-compose up -d
+```
+
+## 📈 Monitoramento
+
+### Prometheus
+Configure o Prometheus para coletar métricas de:
+```
+http://localhost:8080/metrics
+```
+
+### Grafana
+Importe dashboards para visualizar:
+- HTTP requests
+- Database performance
+- Business metrics
